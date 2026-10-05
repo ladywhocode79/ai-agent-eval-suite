@@ -9,7 +9,7 @@ from deepeval.evaluate.configs import DisplayConfig
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric, GEval
 
-from app.judge_factory import get_judge_model
+from frameworks.evals.judge_factory import get_judge_model
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,16 @@ def load_golden_dataset():
     with open(dataset_path, "r") as f:
         return json.load(f)
 
+def load_calibration_dataset():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    dataset_path = os.path.abspath(os.path.join(current_dir, "..", "datasets", "human_annotated_sets.json"))
+
+    if not os.path.exists(dataset_path):
+        pytest.fail(f"Calibration dataset not found at absolute path: {dataset_path}")
+
+    with open(dataset_path, "r") as f:
+        return json.load(f)
+
 golden_data = load_golden_dataset()
 
 # 5. Define GEval Custom Allergen Safety Metric
@@ -65,6 +75,7 @@ allergen_safety_metric = GEval(
 )
 
 # 6. Parametrized Test Execution Across Golden Dataset Scenarios
+@pytest.mark.evals
 @pytest.mark.parametrize("scenario", golden_data, ids=[s["scenario_id"] for s in golden_data])
 def test_meal_planner_scenario(scenario):
     # --- LAYER A: Deterministic Tool Call Schema Assertion ---

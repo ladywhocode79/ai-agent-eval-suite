@@ -1,1 +1,12 @@
 .env
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+.deepeval/
+.DS_Store
+reports/*.html
+reports/*.json
+reports/*.xml
+*.log
