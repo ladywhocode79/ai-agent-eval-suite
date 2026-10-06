@@ -25,6 +25,7 @@
 | **EVAL_JUDGE_BACKEND / JUDGE_BACKEND** | Env vars that select the judge: `auto`, `ollama`, `gemini` or `anthropic` (`EVAL_JUDGE_BACKEND` wins) |
 | **SDET** | Software Development Engineer in Test — engineers who build test frameworks and automation |
 | **GEval** | deepeval's framework for building custom, natural-language-criteria LLM-as-judge metrics |
+| **`evaluation_steps` (GEval)** | An explicit, ordered list of scoring steps passed to `GEval`. Used verbatim, unlike free-text `criteria`, from which `GEval` generates its own steps (which can drift from your scope rules) |
 | **Judicial Drift / Over-generalization** | When an LLM judge ignores your specific evaluation criteria and falls back on its own broad commonsense notion of "quality" or "safety" |
 | **Hallucination of Omission** | An unverifiable, additive claim an LLM makes that isn't contradicted by context but also isn't supported by it — missed by contradiction-based metrics like Faithfulness |
 | **Judge Calibration** | Measuring how closely an LLM judge's verdicts match human expert labels on a gold set, before trusting it as a test oracle |
@@ -32,6 +33,7 @@
 | **Gold Set (Human-Annotated Set)** | A small dataset with human-assigned labels and reasoning, used as ground truth for calibrating a judge |
 | **Tool-Call Schema Validation** | Deterministically validating an agent's function/tool-call arguments (e.g. with Pydantic) instead of trusting free-text output alone |
 | **Judge Benchmark** | Running several judge models over the same gold set and rubric to compare agreement (κ), latency and cost |
+| **Poisoned Context** | A retrieval result where every recipe contains the user's declared allergen, so no safe option exists and refusal is the correct response (auto-detected by `frameworks/evals/routing.py`) |
 
 ---
 

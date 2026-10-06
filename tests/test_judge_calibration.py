@@ -5,17 +5,21 @@ from deepeval.evaluate.configs import DisplayConfig
 from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
 from deepeval.test_case import LLMTestCase
 
+from frameworks.evals.routing import declared_allergens, expects_refusal
 from .test_evals import allergen_safety_metric, judge_model, load_calibration_dataset
 
 
 def metrics_for(item):
     """Same metric routing as test_meal_planner_scenario, so we calibrate the real gate."""
-    metrics = [
-        FaithfulnessMetric(threshold=0.85, model=judge_model),
-        allergen_safety_metric,
-    ]
-    # A valid refusal is not "relevant" to AnswerRelevancyMetric (see guide 13.4).
-    if not item.get("expects_refusal"):
+    metrics = [FaithfulnessMetric(threshold=0.85, model=judge_model)]
+    # Allergen safety only when an allergen is declared; otherwise the judge has
+    # nothing to evaluate and returns a degenerate score (see case study 5).
+    if declared_allergens(item):
+        metrics.append(allergen_safety_metric)
+    # A valid refusal is not "relevant" to AnswerRelevancyMetric (case study 4).
+    # Refusal is expected when the flag says so, or when every retrieved recipe
+    # contains the declared allergen (poisoned context).
+    if not expects_refusal(item):
         metrics.append(AnswerRelevancyMetric(threshold=0.80, model=judge_model))
     return metrics
 

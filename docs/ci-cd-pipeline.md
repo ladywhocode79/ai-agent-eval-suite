@@ -12,6 +12,7 @@ The pipeline applies one idea: **don't trust the judge until it has been checked
                  ▼
  ┌──────────────────────────────────────────┐
  │ Stage 1: judge-calibration-gate          │
+ │   pytest -m unit  (routing, no LLM)      │
  │   pytest -m calibration -s               │  fails if Cohen's κ < 0.80
  └──────────────────┬───────────────────────┘
                     │ needs: (runs only if Stage 1 passes)
@@ -29,7 +30,7 @@ The pipeline applies one idea: **don't trust the judge until it has been checked
 
 | Stage | Job / steps | Command | Gate |
 |-------|-------------|---------|------|
-| 1 | `judge-calibration-gate` | `pytest -m calibration -s` | κ ≥ 0.80 between judge and human labels |
+| 1 | `judge-calibration-gate` | `pytest -m unit`, then `pytest -m calibration -s` | Routing tests pass; κ ≥ 0.80 between judge and human labels |
 | 2 | `scenario-evaluation` | `pytest -m evals -n auto --html=… --junitxml=…` | Every golden-set scenario passes (tool-call schema + judge metrics) |
 | 3 | steps in the Stage 2 job (`if: always()`) | `upload-artifact@v4`, `$GITHUB_STEP_SUMMARY` | None — publishes results even on failure |
 
@@ -56,6 +57,7 @@ Why this order: if the judge disagrees with humans, Stage 2's pass/fail results 
 |--------|---------|-----------|
 | `calibration` | `test_judge_calibration.py::test_judge_cohen_kappa_alignment` | `pytest.ini` |
 | `evals` | `test_evals.py::test_meal_planner_scenario` (4 scenarios) | `pytest.ini` |
+| `unit` | `test_routing.py` (deterministic, free) | `pytest.ini` |
 
 Not in CI by design: `benchmark` (compares two paid models; run manually). The Ollama-based Q&A tests live in the companion `llm-eval-framework` repo, since the runner has no Ollama.
 

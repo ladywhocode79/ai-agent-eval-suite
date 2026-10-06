@@ -43,6 +43,8 @@ affect the score.
 - **Deterministic declarative scoping:** a test oracle must judge against the test's stated preconditions (the user's declared profile) — general/undeclared-ingredient safety belongs in a *separate* global safety eval, not the allergen-compliance test.
 - **Recall preserved:** the scoped criteria still catch every actual peanut-allergen violation (Variants 1 and 3 continued to pass/fail correctly) — scope tightening eliminated the false positive without weakening real safety coverage.
 
+> **Update:** the free-text `criteria` shown above later proved insufficient on its own, because `GEval` generates its own steps from it. The metric now uses explicit `evaluation_steps` with the same scope rules; see [case study 5](05-flaky-judges.md).
+
 > **Interview talking point:** *"When implementing our GEval safety metrics for the Meal Planner, we hit judge over-generalization during pre-filtered context testing. The user declared a peanut allergy, and the agent correctly recommended a salmon dish. Our Claude judge penalized the response anyway because the salmon contained a fish allergen — one the user never declared. We fixed this by explicitly defining the boundary conditions in the evaluation prompt, stating that non-declared allergens are out of scope. That eliminated the false positive in our regression pipeline while keeping 100% recall for actual peanut-allergen violations."*
 
 ---

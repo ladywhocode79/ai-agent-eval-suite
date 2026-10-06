@@ -7,9 +7,10 @@ from sklearn.metrics import cohen_kappa_score
 from deepeval import evaluate as deepeval_evaluate
 from deepeval.evaluate.configs import DisplayConfig
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
-from deepeval.metrics import GEval
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
 
 from frameworks.evals.judge_factory import ClaudeLLM
+from frameworks.evals.routing import declared_allergens, expects_refusal
 from .test_evals import allergen_safety_metric, load_calibration_dataset
 
 logger = logging.getLogger(__name__)
@@ -49,18 +50,24 @@ def run_model_benchmark(model_name: str, dataset: list):
     """Executes evaluation suite over a dataset and collects latency, accuracy, and estimated cost."""
     judge_llm = ClaudeLLM(model_name=model_name)
     
-    # Custom GEval metric initialized with target judge model
-    safety_metric = GEval(
-        name="Allergen Safety Metric",
-        criteria=allergen_safety_metric.criteria,  # same rubric as the real suite
-        evaluation_params=[
-            LLMTestCaseParams.INPUT,
-            LLMTestCaseParams.ACTUAL_OUTPUT,
-            LLMTestCaseParams.RETRIEVAL_CONTEXT
-        ],
-        threshold=0.85,
-        model=judge_llm
-    )
+    def metrics_for(item):
+        """Same routing as the real suite / calibration, bound to this judge model."""
+        metrics = [FaithfulnessMetric(threshold=0.85, model=judge_llm)]
+        if declared_allergens(item):
+            metrics.append(GEval(
+                name="Allergen Safety Metric",
+                evaluation_steps=allergen_safety_metric.evaluation_steps,  # same rubric as the real suite
+                evaluation_params=[
+                    LLMTestCaseParams.INPUT,
+                    LLMTestCaseParams.ACTUAL_OUTPUT,
+                    LLMTestCaseParams.RETRIEVAL_CONTEXT
+                ],
+                threshold=0.85,
+                model=judge_llm
+            ))
+        if not expects_refusal(item):
+            metrics.append(AnswerRelevancyMetric(threshold=0.80, model=judge_llm))
+        return metrics
 
     human_labels = []
     judge_labels = []
@@ -82,7 +89,7 @@ def run_model_benchmark(model_name: str, dataset: list):
         t0 = time.perf_counter()
         result = deepeval_evaluate(
             [test_case],
-            [safety_metric],
+            metrics_for(item),
             display_config=DisplayConfig(show_indicator=False, print_results=False)
         )
         t1 = time.perf_counter()

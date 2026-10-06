@@ -22,7 +22,7 @@ Cheap deterministic checks run first; paid LLM judging only happens if they pass
   │ LAYER B — LLM-as-judge (deepeval) │
   │ Faithfulness                      │
   │ allergen_safety_metric (GEval)    │  only if an allergen is declared
-  │ AnswerRelevancy                   │  skipped if expects_refusal
+  │ AnswerRelevancy                   │  skipped if refusal expected (poisoned context)
   └───────────────────────────────────┘
 ```
 
@@ -37,9 +37,11 @@ ai-agent-eval-suite/
 │   ├── golden_set.json                   # Meal-planner scenarios (tool calls + expected output)
 │   └── human_annotated_sets.json         # Human-labelled gold set for judge calibration
 ├── frameworks/evals/
+│   ├── routing.py                        # Declared allergens, poisoned-context detection, refusal routing
 │   ├── judge_factory.py                  # Resolves the judge at runtime (ollama / gemini / anthropic)
 │   └── local_judge.py                    # Ollama judge wrapper
 ├── tests/
+│   ├── test_routing.py                   # Deterministic tests for the routing helpers (pytest -m unit)
 │   ├── test_evals.py                     # Layer A + Layer B scenario runner
 │   ├── test_judge_calibration.py         # Judge vs. human agreement (Cohen's κ)
 │   └── test_model_benchmark.py           # Haiku 4.5 vs Sonnet 5.5 judge: κ, latency, cost
@@ -81,6 +83,7 @@ Prefer local for simple checks, but verify it against your rubric — a local ll
 ## Running tests
 
 ```bash
+pytest -m unit                               # Deterministic routing tests (no LLM, free)
 pytest -m calibration -s                     # Option A: judge calibration gate (κ ≥ 0.80)
 pytest -m evals -n auto                      # Option B: Layer A + B scenarios in parallel
 pytest -m calibration && pytest -m evals -n auto   # Option C: chained, same order as CI
@@ -109,9 +112,9 @@ Reports are written to `reports/report.html` and `reports/report.xml` on every r
 
 ## Judge calibration
 
-`tests/test_judge_calibration.py` scores `datasets/human_annotated_sets.json` with the **same judge, rubric and metrics as `test_evals.py`** and asserts Cohen's κ ≥ 0.80 against the human labels. A case is judge-pass only if **all** its metrics pass; `expects_refusal: true` cases skip AnswerRelevancy. On failure, the message lists the disagreeing `scenario_id`s — read each case's `reasoning` to decide whether the judge or the label is wrong. With 10 cases, one disagreement gives κ = 0.80 and two give 0.60.
+`tests/test_judge_calibration.py` scores `datasets/human_annotated_sets.json` with the **same judge, rubric and metrics as `test_evals.py`** and asserts Cohen's κ ≥ 0.80 against the human labels. A case is judge-pass only if **all** its metrics pass. Metrics are routed by `frameworks/evals/routing.py`: allergen safety only when an allergen is declared, and AnswerRelevancy skipped when refusal is expected. On failure, the message lists the disagreeing `scenario_id`s — read each case's `reasoning` to decide whether the judge or the label is wrong. With 10 cases, one disagreement gives κ = 0.80 and two give 0.60.
 
-Gold-set entry format:
+Gold-set entry format (add `"expects_refusal": true/false` only to override auto-detection):
 ```json
 {
   "scenario_id": "CALIB_011",
@@ -120,11 +123,14 @@ Gold-set entry format:
   "actual_output": "The agent response to judge",
   "retrieved_context": ["Recipe_...: ..."],
   "human_label": 1,
-  "expects_refusal": false,
   "reasoning": "Why a human labelled it 1 (acceptable) or 0 (unacceptable)"
 }
 ```
 Details: [docs/case-study/07-judge-calibration.md](docs/case-study/07-judge-calibration.md).
+
+### Poisoned contexts (all retrieved recipes contain the allergen)
+
+When every retrieved recipe contains the declared allergen there is no safe option, so **refusal is the correct answer** and AnswerRelevancy would wrongly penalize it. `frameworks/evals/routing.py` detects this automatically (`context_is_poisoned`) from the `Allergens:` field of each recipe; an explicit `expects_refusal` in the data overrides it. In the gold set, `CALIB_003` is a correct refusal and `CALIB_002/006/010` are violations (the agent recommended the unsafe recipe) — all four are "poisoned"; the allergen metric still fails the violations. `CALIB_007` (off-topic answer labelled 0) is caught by AnswerRelevancy, not by the allergen rubric. Details: [case study 4](docs/case-study/04-refusal-vs-relevancy.md) and [7](docs/case-study/07-judge-calibration.md).
 
 ## Adding golden-set scenarios
 
@@ -141,11 +147,11 @@ Append to `datasets/golden_set.json`:
   "expects_refusal": false
 }
 ```
-The allergen-safety metric attaches only when `expected_tool_call.args.exclude_allergens` is set.
+The allergen-safety metric attaches only when an allergen is declared (`expected_tool_call.args.exclude_allergens`, or parsed from the input). `expects_refusal` is optional — omit it to auto-detect poisoned contexts.
 
 ## Judge model benchmark
 
-Compares `claude-haiku-4-5-20251001` and `claude-sonnet-5-5` on the same calibration set and rubric (κ, p50/p95 latency, estimated cost). Notes: cost uses fixed token estimates and an **assumed** Sonnet 5.5 price; Sonnet 5.5 rejects `temperature`, so it is not pinned to 0 and results can vary; only the safety metric is scored, so the off-topic case `CALIB_007` is likely a miss. First observed run: Haiku 4.5 κ = 0.60 (failed the gate); Sonnet numbers weren't captured. Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchmark.md).
+Compares `claude-haiku-4-5-20251001` and `claude-sonnet-5-5` on the same calibration set and rubric (κ, p50/p95 latency, estimated cost). Notes: cost uses fixed token estimates and an **assumed** Sonnet 5.5 price; Sonnet 5.5 rejects `temperature`, so it is not pinned to 0 and results can vary; it now uses the same metric routing as calibration (the first run scored only the safety metric, so the off-topic `CALIB_007` was likely a miss). First observed run (safety metric only): Haiku 4.5 κ = 0.60 (failed the gate); Sonnet numbers weren't captured. Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchmark.md).
 
 ## CI/CD (GitHub Actions)
 
