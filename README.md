@@ -90,6 +90,21 @@ pytest -m benchmark -v -s                    # Option D: judge model benchmark (
 pytest "tests/test_evals.py::test_meal_planner_scenario[MP_VAL_001]" -v
 ```
 
+### Sequential execution (no parallelism)
+
+`pytest.ini` sets `-n auto` (pytest-xdist). Pass `-n 0` to disable workers and run every test sequentially on the main thread:
+
+```bash
+# Option 1: calibration gate only
+pytest tests/test_judge_calibration.py -m calibration -n 0 -s
+
+# Option 2: scenario evaluation suite only
+pytest tests/test_evals.py -m evals -n 0 -s
+
+# Option 3: chained — scenarios run only if calibration passes (κ ≥ 0.80)
+pytest tests/test_judge_calibration.py -m calibration -n 0 -s && pytest tests/test_evals.py -m evals -n 0 -s
+```
+
 Reports are written to `reports/report.html` and `reports/report.xml` on every run; the benchmark also writes `reports/model_benchmark.md` and `.json`.
 
 ## Judge calibration
